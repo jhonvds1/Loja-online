@@ -1,0 +1,130 @@
+CREATE TABLE Produto (
+    ID_Produto INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    preco DECIMAL(10,2) NOT NULL
+);
+
+CREATE TABLE Cliente (
+    ID_Cliente INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    senha_hash TEXT NOT NULL,
+    rua VARCHAR(255) NOT NULL,
+    numero VARCHAR(10),
+    bairro VARCHAR(100),
+    cidade VARCHAR(100) NOT NULL,
+    estado VARCHAR(50) NOT NULL
+);
+
+CREATE TABLE Compra (
+    ID_Compra INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ID_Cliente INT REFERENCES Cliente(ID_Cliente) ON DELETE CASCADE,
+    Valor_Total DECIMAL(20,2) NOT NULL,
+    Status VARCHAR(50) DEFAULT 'Aguardando Pagamento',
+    Data_Compra TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE Carrinho (
+    ID_Carrinho INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ID_Cliente INT REFERENCES Cliente(ID_Cliente) ON DELETE CASCADE
+);
+
+-- Tabela de ligação (se realmente necessária)
+CREATE TABLE Contem_Itens (
+    ID_Carrinho INT REFERENCES Carrinho(ID_Carrinho) ON DELETE CASCADE
+);
+
+CREATE TABLE Item_Carrinho (
+    ID_Carrinho INT NOT NULL REFERENCES Carrinho(ID_Carrinho) ON DELETE CASCADE,
+    ID_Produto INT NOT NULL REFERENCES Produto(ID_Produto) ON DELETE CASCADE,
+    quantidade INTEGER NOT NULL CHECK (quantidade > 0),
+    PRIMARY KEY (ID_Carrinho, ID_Produto)
+);
+
+CREATE TABLE Adicionado (
+    ID_Produto INT NOT NULL REFERENCES Produto(ID_Produto) ON DELETE CASCADE
+);
+
+CREATE TABLE Vendido_Em (
+    ID_Produto INT NOT NULL REFERENCES Produto(ID_Produto) ON DELETE CASCADE
+);
+
+CREATE TABLE Item_Compra (
+    ID_Compra INT NOT NULL REFERENCES Compra(ID_Compra) ON DELETE CASCADE,
+    ID_Produto INT NOT NULL REFERENCES Produto(ID_Produto) ON DELETE CASCADE,
+    Quantidade INTEGER NOT NULL CHECK (Quantidade > 0),
+    Preco DECIMAL(10,2) NOT NULL,
+    PRIMARY KEY (ID_Compra, ID_Produto)
+);
+
+CREATE TABLE Inclui (
+    ID_Compra INT NOT NULL REFERENCES Compra(ID_Compra) ON DELETE CASCADE
+);
+
+CREATE TABLE Devolucao_Troca (
+    ID_Troca INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    Tipo VARCHAR(9) NOT NULL,
+    Status VARCHAR(50) DEFAULT 'Aguardando Avaliação',
+    Data_Solicitacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Motivo TEXT NOT NULL,
+    ID_Cliente INT REFERENCES Cliente(ID_Cliente) ON DELETE CASCADE
+);
+
+CREATE TABLE Solicita (
+    ID_Compra INT NOT NULL REFERENCES Compra(ID_Compra) ON DELETE CASCADE,
+    ID_Troca INT NOT NULL REFERENCES Devolucao_Troca(ID_Troca) ON DELETE CASCADE,
+    PRIMARY KEY (ID_Compra, ID_Troca)
+);
+
+CREATE TABLE Devolvido_Trocado (
+    ID_Troca INT NOT NULL REFERENCES Devolucao_Troca(ID_Troca) ON DELETE CASCADE,
+    ID_Produto INT NOT NULL REFERENCES Produto(ID_Produto) ON DELETE CASCADE,
+    PRIMARY KEY (ID_Troca, ID_Produto)
+);
+
+CREATE TABLE Avaliacao (
+    ID_Avaliacao INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ID_Cliente INT NOT NULL REFERENCES Cliente(ID_Cliente) ON DELETE CASCADE,
+    nota INTEGER NOT NULL CHECK (nota >= 1 AND nota <= 5),
+    comentario VARCHAR(100)
+);
+
+CREATE TABLE Recebe (
+    AvaliacaoID INT NOT NULL REFERENCES Avaliacao(ID_Avaliacao) ON DELETE CASCADE,
+    ID_Produto INT NOT NULL REFERENCES Produto(ID_Produto) ON DELETE CASCADE,
+    PRIMARY KEY (AvaliacaoID, ID_Produto)
+);
+
+CREATE TABLE Estoque (
+    ID_Estoque INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    quantidade INTEGER NOT NULL CHECK (quantidade >= 0)
+);
+
+CREATE TABLE Tem_Em (
+    ID_Produto INT NOT NULL REFERENCES Produto(ID_Produto) ON DELETE CASCADE,
+    ID_Estoque INT NOT NULL REFERENCES Estoque(ID_Estoque) ON DELETE CASCADE,
+    PRIMARY KEY (ID_Produto, ID_Estoque)
+);
+
+CREATE TABLE Fornecedor (
+    CNPJ CHAR(14) NOT NULL UNIQUE,
+    Email VARCHAR(255) NOT NULL UNIQUE,
+    Telefone VARCHAR(15) NOT NULL,
+    Nome VARCHAR(100) NOT NULL,
+    PRIMARY KEY (CNPJ)
+);
+
+CREATE TABLE Fornece (
+    ID_Produto INT NOT NULL REFERENCES Produto(ID_Produto) ON DELETE CASCADE,
+    CNPJ CHAR(14) NOT NULL REFERENCES Fornecedor(CNPJ) ON DELETE CASCADE,
+    PRIMARY KEY (ID_Produto, CNPJ)
+);
+
+CREATE TABLE Solicita_Reposicao (
+    ID_Pedido INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    ID_Estoque INT NOT NULL REFERENCES Estoque(ID_Estoque) ON DELETE CASCADE,
+    CNPJ CHAR(14) NOT NULL REFERENCES Fornecedor(CNPJ) ON DELETE CASCADE,
+    quantidade INT NOT NULL CHECK (quantidade > 0),
+    data_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(50) DEFAULT 'Aguardando Confirmação'
+);

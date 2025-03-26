@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minhas Compras</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            padding: 20px;
+        }
+        
+        .compras-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 25px;
+        }
+
+        .header-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        
+        .nav-button {
+            padding: 10px 15px;
+            background: #5a1a2b;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .nav-button:hover {
+            background: #3d0f1b;
+        }
+        
+        h1 {
+            text-align: center;
+            color: #5a1a2b;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .compra-item {
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .compra-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .compra-status {
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .status-pendente {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-concluida {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .compra-detalhes {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #eee;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .compra-button {
+            padding: 5px 10px;
+            font-size: 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .details-button {
+            background: #5a1a2b;
+            color: white;
+            border: 1px solid #5a1a2b;
+        }
+        
+        .details-button:hover {
+            background: #3d0f1b;
+        }
+        
+        .return-button {
+            background: white;
+            color: #5a1a2b;
+            border: 1px solid #5a1a2b;
+        }
+        
+        .return-button:hover {
+            background: #f8f8f8;
+        }
+        
+        .empty-message {
+            text-align: center;
+            padding: 40px 0;
+            color: #666;
+            font-size: 18px;
+        }
+        
+        .back-to-shopping {
+            margin-top: 30px;
+            text-align: center;
+        }
+        
+        .back-button {
+            padding: 10px 20px;
+            background: #5a1a2b;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .back-button:hover {
+            background: #3d0f1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="compras-container">
+        <div class="header-buttons">
+            <a href="/home" class="nav-button">← Voltar às Compras</a>
+            <a href="/carrinho" class="nav-button">Ver Carrinho</a>
+        </div>
+        
+        <h1>Minhas Compras</h1>
+        
+        {% if not compras %}
+            <div class="empty-message">
+                Nenhuma compra encontrada. Aproveite nossas ofertas!
+            </div>
+        {% else %}
+            {% for compra in compras %}
+                <div class="compra-item">
+                    <div class="compra-info">
+                        <span><strong>Compra #{{ compra.id_compra }}</strong></span>
+                        <span>R$ {{ "%.2f"|format(compra.valor_total) }}</span>
+                    </div>
+                    <div class="compra-info">
+                        <span>{{ compra.data_compra.strftime('%d/%m/%Y %H:%M') }}</span>
+                        <span class="compra-status status-{{ compra.status }}">
+                            {{ compra.status|capitalize }}
+                        </span>
+                    </div>
+                    <div class="compra-detalhes">
+                        <a href="/detalhes_compra/{{ compra.id_compra }}" class="compra-button details-button">
+                            Ver Detalhes
+                        </a>
+                        {% if compra.status == 'concluída' %}
+                        <a href="/solicitar_troca_devolucao/{{ compra.id_compra }}" class="compra-button return-button">
+                            Devolver/Trocar
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        {% endif %}
+        
+        <div class="back-to-shopping">
+            <a href="/home" class="back-button">Continuar Comprando</a>
+        </div>
+    </div>
+</body>
+</html>
