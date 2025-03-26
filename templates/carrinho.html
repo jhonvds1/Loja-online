@@ -27,6 +27,29 @@
             padding: 25px;
         }
 
+        .header-buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        
+        .nav-button {
+            padding: 10px 15px;
+            background: #5a1a2b;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .nav-button:hover {
+            background: #3d0f1b;
+        }
+
         h1 {
             text-align: center;
             color: #5a1a2b;
@@ -195,10 +218,37 @@
             margin-top: 10px;
             display: none;
         }
+
+        .back-to-shopping {
+            margin: 20px 0;
+            text-align: left;
+        }
+        
+        .back-button {
+            padding: 10px 20px;
+            background: #5a1a2b;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .back-button:hover {
+            background: #3d0f1b;
+        }
     </style>
 </head>
 <body>
     <div class="cart-container">
+        <div class="header-buttons">
+            <a href="/home" class="nav-button">← Voltar às Compras</a>
+            <a href="/minhas_compras" class="nav-button">Minhas Compras</a>
+        </div>
+        
         <h1>Seu Carrinho</h1>
         
         <div class="success-message" id="success-message"></div>
@@ -504,7 +554,6 @@
                     checkoutBtn.textContent = 'Finalizar Compra';
                 }
             });
-
 
             // Carregar carrinho inicialmente
             renderCart();

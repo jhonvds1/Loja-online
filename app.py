@@ -27,6 +27,8 @@ class Carrinho(db.Model):
     id_carrinho = db.Column(db.Integer , primary_key = True)
     id_cliente = db.Column(db.Integer , nullable = False)
 
+
+
 class Estoque(db.Model):
     __tablename__ = 'estoque'
     id_estoque = db.Column(db.Integer, db.ForeignKey('produto.id_produto'), primary_key=True)
@@ -225,6 +227,16 @@ def api_produtos():
             'imagem': IMAGENS_PRODUTOS.get(produto.id_produto, "https://via.placeholder.com/150")
         })
     return jsonify(produtos_list)
+
+@app.route('/minhas_compras')
+def minhas_compras():
+    if 'id_cliente' not in session:
+        return redirect(url_for('login'))
+    
+    cliente_id = session['id_cliente']
+    compras = Compra.query.filter_by(id_cliente=cliente_id).order_by(Compra.data_compra.desc()).all()
+    
+    return render_template('minhas_compras.html', compras=compras)
 
 def register_new_user():
     nome = request.form('nome')
