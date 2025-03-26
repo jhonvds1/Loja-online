@@ -138,49 +138,63 @@ def adicionar_ao_carrinho(id_produto):
     if 'id_cliente' not in session:
         return jsonify({'error': 'Você precisa estar logado para adicionar itens ao carrinho.'}), 401
 
-    # Verificar se o produto existe
+    # Verifica se o produto existe
     produto = Produto.query.get(id_produto)
     if not produto:
-        return jsonify({'error': 'Produto não encontrado.'}), 404
+        return jsonify({'error': f'Produto com ID {id_produto} não encontrado.'}), 404
 
-    # Obter quantidade do JSON enviado pelo front
+    # Obtém os dados da requisição
     dados = request.get_json()
     if not dados:
         return jsonify({'error': 'Dados inválidos.'}), 400
-        
-    quantidade = dados.get('quantidade', 1)
 
-    # Encontrar ou criar o carrinho do cliente
+    # Pega o valor enviado (novamente, esse valor representa a quantidade desejada)
+    nova_quantidade = dados.get('quantidade', 1)
+
+    # Obtém ou cria o carrinho do cliente
     cliente_id = session['id_cliente']
     carrinho = Carrinho.query.filter_by(id_cliente=cliente_id).first()
-    
     if not carrinho:
         carrinho = Carrinho(id_cliente=cliente_id)
         db.session.add(carrinho)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': f'Erro ao criar carrinho: {str(e)}'}), 500
 
-    # Verificar se o item já existe no carrinho
+    # Verifica se o item já existe no carrinho
     item = Item_Carrinho.query.filter_by(
         id_carrinho=carrinho.id_carrinho,
         id_produto=id_produto
     ).first()
 
     if item:
-        item.quantidade += quantidade
+        # Atualiza a quantidade para o novo valor (não soma)
+        item.quantidade = nova_quantidade
     else:
         item = Item_Carrinho(
             id_carrinho=carrinho.id_carrinho,
             id_produto=id_produto,
-            quantidade=quantidade
+            quantidade=nova_quantidade
         )
         db.session.add(item)
 
-    db.session.commit()
-    return jsonify({
-        'success': True,
-        'message': 'Produto adicionado ao carrinho com sucesso!',
-        'carrinho_id': carrinho.id_carrinho
-    })
+    try:
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': f'Produto {produto.nome} adicionado/atualizado no carrinho!',
+            'produto': {
+                'id': produto.id_produto,
+                'nome': produto.nome,
+                'preco': produto.preco
+            },
+            'quantidade': nova_quantidade
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Erro ao adicionar/atualizar item: {str(e)}'}), 500
 
 # Adicionar rota para remover item
 @app.route('/remover_item/<int:id_produto>', methods=['POST'])
@@ -228,22 +242,33 @@ def ver_carrinho():
     carrinho = Carrinho.query.filter_by(id_cliente=cliente_id).first()
 
     if not carrinho:
-        return jsonify({'itens': []})  # Retorna lista vazia ao invés de mensagem
+        return jsonify({'itens': []})
 
-    itens = []
-    for item in carrinho.itens:
-        produto = Produto.query.get(item.id_produto)
-        if produto:  # Verifica se o produto existe
-            itens.append({
-                'id_produto': produto.id_produto,  # Mudei de 'produto_id' para 'id_produto'
-                'nome': produto.nome,
-                'preco': float(produto.preco),  # Garante que é float
-                'quantidade': item.quantidade,
-                'total': float(produto.preco * item.quantidade),
-                'imagem': IMAGENS_PRODUTOS.get(produto.id_produto, "https://via.placeholder.com/150")
-            })
+    # Carrega explicitamente os itens e produtos relacionados
+    itens = db.session.query(Item_Carrinho, Produto)\
+        .join(Produto, Item_Carrinho.id_produto == Produto.id_produto)\
+        .filter(Item_Carrinho.id_carrinho == carrinho.id_carrinho)\
+        .all()
 
-    return jsonify({'itens': itens})
+    itens_formatados = []
+    for item, produto in itens:
+        itens_formatados.append({
+            'id_produto': produto.id_produto,
+            'nome': produto.nome,
+            'preco': float(produto.preco),
+            'quantidade': item.quantidade,
+            'total': float(produto.preco * item.quantidade),
+            'imagem': IMAGENS_PRODUTOS.get(produto.id_produto, "https://via.placeholder.com/150")
+        })
 
+    return jsonify({
+        'itens': itens_formatados,
+        'debug': {
+            'cliente_id': cliente_id,
+            'carrinho_id': carrinho.id_carrinho if carrinho else None,
+            'total_itens': len(itens_formatados)
+        }
+    })
+    
 if __name__ == '__main__':
     app.run(debug=True)
