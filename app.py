@@ -76,6 +76,29 @@ def add_usuario():
     db.session.commit()
     return redirect(url_for('login'))
 
+@app.route('/remover_item/<int:id_produto>', methods=['POST'])
+def remover_item(id_produto):
+    if 'id_cliente' not in session:
+        return jsonify({'error': 'Não autorizado'}), 401
+
+    cliente_id = session['id_cliente']
+    carrinho = Carrinho.query.filter_by(id_cliente=cliente_id).first()
+    
+    if not carrinho:
+        return jsonify({'error': 'Carrinho não encontrado'}), 404
+
+    item = Item_Carrinho.query.filter_by(
+        id_carrinho=carrinho.id_carrinho,
+        id_produto=id_produto
+    ).first()
+
+    if item:
+        db.session.delete(item)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Item removido do carrinho'})
+    
+    return jsonify({'error': 'Item não encontrado no carrinho'}), 404
+
 @app.route('/userlogin' , methods = ['GET' , 'POST'])
 def user_login():
     if request.method == 'POST':
@@ -196,30 +219,6 @@ def adicionar_ao_carrinho(id_produto):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Erro ao adicionar/atualizar item: {str(e)}'}), 500
-
-# Adicionar rota para remover item
-@app.route('/remover_item/<int:id_produto>', methods=['POST'])
-def remover_item(id_produto):
-    if 'id_cliente' not in session:
-        return jsonify({'error': 'Não autorizado'}), 401
-
-    cliente_id = session['id_cliente']
-    carrinho = Carrinho.query.filter_by(id_cliente=cliente_id).first()
-    
-    if not carrinho:
-        return jsonify({'error': 'Carrinho não encontrado'}), 404
-
-    item = Item_Carrinho.query.filter_by(
-        id_carrinho=carrinho.id_carrinho,
-        id_produto=id_produto
-    ).first()
-
-    if item:
-        db.session.delete(item)
-        db.session.commit()
-        return jsonify({'success': True, 'message': 'Item removido do carrinho'})
-    
-    return jsonify({'error': 'Item não encontrado no carrinho'}), 404
 
 # Rota para a página inicial
 @app.route('/home')
