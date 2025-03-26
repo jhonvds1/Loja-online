@@ -10,6 +10,15 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+class PedidoAbastecimento(db.Model):
+    __tablename__ = 'pedido_abastecimento'
+    id_pedido = db.Column(db.Integer, primary_key=True)
+    id_produto = db.Column(db.Integer, db.ForeignKey('produto.id_produto'), nullable=False)
+    quantidade = db.Column(db.Integer, nullable=False)
+    data = db.Column(db.DateTime, default=db.func.now())
+    cnpj_fornecedor = db.Column(db.String(14), db.ForeignKey('fornecedor.cnpj'))  # Atualizado
+    status = db.Column(db.String(20), default='pendente')
+
 class Compra(db.Model):
     __tablename__ = 'compra'
     id_compra = db.Column(db.Integer, primary_key=True)
@@ -23,9 +32,23 @@ class Compra(db.Model):
     def __repr__(self):
         return f'<Compra {self.id_compra} - {self.status}>'
 
+
 class Carrinho(db.Model):
     id_carrinho = db.Column(db.Integer , primary_key = True)
     id_cliente = db.Column(db.Integer , nullable = False)
+
+class Fornecedor(db.Model):
+    __tablename__ = 'fornecedor'
+    cnpj = db.Column(db.String(14), primary_key=True)  # Alterado para minúsculo
+    email = db.Column(db.String(100), nullable=False)
+    telefone = db.Column(db.String(20))
+    nome = db.Column(db.String(100), nullable=False)
+
+class Fornece(db.Model):
+    __tablename__ = 'fornece'
+    id_produto = db.Column(db.Integer, db.ForeignKey('produto.id_produto'), primary_key=True)
+    cnpj = db.Column(db.String(14), db.ForeignKey('fornecedor.cnpj'), primary_key=True)  # Atualizado
+
 
 class Avaliacao(db.Model):
     __tablename__ = 'avaliacao'
@@ -115,43 +138,77 @@ class Cliente(db.Model):
     numero = db.Column(db.String(10) , nullable = False)
     rua = db.Column(db.String(255) , nullable = False)
 
+def registrar_reabastecimento(produto_id, quantidade):
+    # Encontra o fornecedor do produto
+    fornece = Fornece.query.filter_by(id_produto=produto_id).first()
+    
+    if fornece:
+        pedido = PedidoAbastecimento(
+            id_produto=produto_id,
+            quantidade=quantidade,
+            cnpj_fornecedor=fornece.CNPJ,
+            status='abastecido_automatico'
+        )
+        db.session.add(pedido)
+
+def notificar_fornecedor(produto_id, quantidade):
+    fornece = Fornece.query.filter_by(id_produto=produto_id).first()
+    if not fornece:
+        return
+        
+    fornecedor = Fornecedor.query.get(fornece.CNPJ)
+    produto = Produto.query.get(produto_id)
+    
+    # Aqui você implementaria o envio real de e-mail
+    print(f"Notificação para {fornecedor.nome} ({fornecedor.email}):")
+    print(f"Produto {produto.nome} foi reabastecido para {quantidade} unidades")
+
 @app.route('/finalizar_compra', methods=['POST'])
 def finalizar_compra():
     if 'id_cliente' not in session:
-        return jsonify({'error': 'Você precisa estar logado para finalizar a compra.'}), 401
+        return jsonify({'error': 'Você precisa estar logado'}), 401
 
     cliente_id = session['id_cliente']
     carrinho = Carrinho.query.filter_by(id_cliente=cliente_id).first()
     
     if not carrinho or not carrinho.itens:
-        return jsonify({'error': 'Seu carrinho está vazio.'}), 400
+        return jsonify({'error': 'Carrinho vazio'}), 400
 
     try:
-        # Verificar estoque antes de processar
-        for item in carrinho.itens:
-            estoque = Estoque.query.get(item.id_produto)
-            if not estoque or estoque.quantidade < item.quantidade:
-                produto = Produto.query.get(item.id_produto)
-                disponivel = estoque.quantidade if estoque else 0
-                return jsonify({
-                    'error': f'Estoque insuficiente para {produto.nome}. Disponível: {disponivel}'
-                }), 400
-
-        # Calcular valor total
+        # Processar a compra
         valor_total = sum(item.produto.preco * item.quantidade for item in carrinho.itens)
         
-        # Criar a compra
         nova_compra = Compra(
             status='concluída',
             valor_total=valor_total,
             id_cliente=cliente_id
         )
         db.session.add(nova_compra)
-
-        # Atualizar estoque e processar itens
+        
+        # Atualizar estoque e verificar reabastecimento
         for item in carrinho.itens:
-            estoque = Estoque.query.get(item.id_produto)
-            estoque.quantidade -= item.quantidade  # Reduz o estoque
+            produto_id = item.produto.id_produto
+            quantidade_comprada = item.quantidade
+            
+            # Atualiza estoque
+            estoque = Estoque.query.get(produto_id)
+            estoque.quantidade -= quantidade_comprada
+            
+            # Verifica se precisa reabastecer
+            if estoque.quantidade < 50:
+                estoque.quantidade = 200
+                
+                # Registra o reabastecimento (se tiver a tabela)
+                if 'PedidoAbastecimento' in dir(db.Model):
+                    fornece = Fornece.query.filter_by(id_produto=produto_id).first()
+                    if fornece:
+                        pedido = PedidoAbastecimento(
+                            id_produto=produto_id,
+                            quantidade=200,
+                            cnpj_fornecedor=fornece.CNPJ,
+                            status='abastecido_automatico'
+                        )
+                        db.session.add(pedido)
 
         # Limpar carrinho
         Item_Carrinho.query.filter_by(id_carrinho=carrinho.id_carrinho).delete()
@@ -160,15 +217,15 @@ def finalizar_compra():
         
         return jsonify({
             'success': True,
-            'message': 'Compra finalizada com sucesso! Estoque atualizado.',
-            'compra_id': nova_compra.id_compra,
-            'valor_total': valor_total
+            'message': 'Compra finalizada e estoque verificado',
+            'compra_id': nova_compra.id_compra
         })
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': f'Erro ao finalizar compra: {str(e)}'}), 500
-
+        return jsonify({'error': str(e)}), 500
+    
+    
 @app.route('/api/avaliacoes/<int:produto_id>')  # Alterado para produto_id para consistência
 def get_avaliacoes(produto_id):  # Mantido como produto_id
     avaliacoes = db.session.query(Avaliacao)\
@@ -225,6 +282,27 @@ def avaliar_produto():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Erro ao processar avaliação: {str(e)}'}), 500
+
+def verificar_reabastecimento(produto_id):
+    estoque = Estoque.query.get(produto_id)
+    if estoque.quantidade < 50:  # Nível mínimo
+        # Encontra o fornecedor
+        fornece = Fornece.query.filter_by(id_produto=produto_id).first()
+        if fornece:
+            # Cria pedido de abastecimento
+            pedido = PedidoAbastecimento(
+                id_produto=produto_id,
+                quantidade=200,  # Quantidade para reabastecer
+                cnpj_fornecedor=fornece.cnpj,
+                status='pendente'
+            )
+            db.session.add(pedido)
+            
+            # Atualiza estoque
+            estoque.quantidade = 200
+            
+            # Notifica fornecedor (implementação básica)
+            print(f"Notificar fornecedor {fornece.cnpj} sobre reabastecimento do produto {produto_id}")
 
 
 @app.route('/add_usuario' , methods=['POST'])
@@ -298,54 +376,53 @@ def form_troca_devolucao(id_compra):
 
 
 
-@app.route('/api/solicitar_troca_devolucao', methods=['POST'])
-def solicitar_troca_devolucao():
+@app.route('/solicitar_troca_devolucao/<int:id_compra>', methods=['GET', 'POST'])
+def solicitar_troca_devolucao(id_compra):
     if 'id_cliente' not in session:
-        return jsonify({'error': 'Não autorizado'}), 401
-        
-    dados = request.get_json()
+        return redirect(url_for('login'))
     
-    try:
-        # Verificar se a compra existe e pertence ao cliente
-        compra = Compra.query.filter_by(
-            id_compra=dados['id_compra'],
-            id_cliente=session['id_cliente']
-        ).first()
-        
-        if not compra:
-            return jsonify({'error': 'Compra não encontrada'}), 404
-        
-        # Criar a solicitação para a compra completa
-        nova_solicitacao = DevolucaoTroca(
-            tipo=dados['tipo'],
-            motivo=dados['motivo'],
-            id_cliente=session['id_cliente']
-        )
-        db.session.add(nova_solicitacao)
-        db.session.flush()  # Para obter o ID
-        
-        # Adicionar todos os produtos da compra
-        for id_produto, quantidade in dados['produtos'].items():
-            devolvido = DevolvidoTrocado(
-                id_troca=nova_solicitacao.id_troca,
-                id_produto=id_produto,
-                quantidade=quantidade
+    compra = Compra.query.filter_by(id_compra=id_compra, id_cliente=session['id_cliente']).first_or_404()
+    
+    if request.method == 'POST':
+        try:
+            tipo = request.form.get('tipo')
+            motivo = request.form.get('motivo')
+            
+            # Cria solicitação
+            nova_solicitacao = DevolucaoTroca(
+                tipo=tipo,
+                motivo=motivo,
+                id_cliente=session['id_cliente']
             )
-            db.session.add(devolvido)
-        
-        # Criar relação com a compra
-        relacao = Solicita(
-            id_compra=compra.id_compra,
-            id_troca=nova_solicitacao.id_troca
-        )
-        db.session.add(relacao)
-        
-        db.session.commit()
-        return jsonify({'success': True, 'id_troca': nova_solicitacao.id_troca})
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+            db.session.add(nova_solicitacao)
+            db.session.flush()
+            
+            # Relaciona com a compra
+            relacao = Solicita(
+                id_compra=compra.id_compra,
+                id_troca=nova_solicitacao.id_troca
+            )
+            db.session.add(relacao)
+            
+            # Adiciona produtos (simplificado - na prática você capturaria do formulário)
+            for item in compra.itens_compra:
+                devolvido = DevolvidoTrocado(
+                    id_troca=nova_solicitacao.id_troca,
+                    id_produto=item.id_produto,
+                    quantidade=item.quantidade
+                )
+                db.session.add(devolvido)
+            
+            db.session.commit()
+            flash('Solicitação registrada com sucesso!', 'success')
+            return redirect(url_for('minhas_compras'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Erro ao processar solicitação: {str(e)}', 'danger')
+    
+    # GET - Mostrar formulário
+    return render_template('solicitar_troca_devolucao.html', compra=compra)
     
 @app.route('/api/produtos_compra/<int:id_compra>')
 def produtos_compra(id_compra):
@@ -588,5 +665,3 @@ if __name__ == '__main__':
                 db.session.rollback()
     
     app.run(debug=True)
-
-#TODO: Criar gatilho para pedir mais produtos quando chegam no valor mínimo. criar Devolução/Troca
