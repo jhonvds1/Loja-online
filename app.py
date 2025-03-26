@@ -67,6 +67,33 @@ class Item_Carrinho(db.Model):
     carrinho = db.relationship('Carrinho', backref=db.backref('itens', lazy=True))
     produto = db.relationship('Produto', backref=db.backref('itens', lazy=True))
 
+class DevolucaoTroca(db.Model):
+    __tablename__ = 'devolucao_troca'
+    id_troca = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(20), nullable=False)  # 'devolucao' ou 'troca'
+    status = db.Column(db.String(20), nullable=False, default='pendente')
+    data_solicitacao = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+    motivo = db.Column(db.String(500))
+    id_cliente = db.Column(db.Integer, db.ForeignKey('cliente.id_cliente'), nullable=False)
+    
+    cliente = db.relationship('Cliente', backref=db.backref('solicitacoes', lazy=True))
+
+class DevolvidoTrocado(db.Model):
+    __tablename__ = 'devolvido_trocado'
+    id_troca = db.Column(db.Integer, db.ForeignKey('devolucao_troca.id_troca'), primary_key=True)
+    id_produto = db.Column(db.Integer, db.ForeignKey('produto.id_produto'), primary_key=True)
+    quantidade = db.Column(db.Integer, nullable=False, default=1)
+    
+    produto = db.relationship('Produto')
+
+class Solicita(db.Model):
+    __tablename__ = 'solicita'
+    id_compra = db.Column(db.Integer, db.ForeignKey('compra.id_compra'), primary_key=True)
+    id_troca = db.Column(db.Integer, db.ForeignKey('devolucao_troca.id_troca'), primary_key=True)
+    
+    compra = db.relationship('Compra')
+    devolucao_troca = db.relationship('DevolucaoTroca')
+
 class Produto(db.Model):
     __tablename__ = 'produto'  
     id_produto = db.Column(db.Integer, primary_key=True, autoincrement=True, default = 1)
@@ -248,6 +275,98 @@ def remover_item(id_produto):
         return jsonify({'success': True, 'message': 'Item removido do carrinho'})
     
     return jsonify({'error': 'Item não encontrado no carrinho'}), 404
+
+@app.route('/solicitar_troca_devolucao/<int:id_compra>')
+def form_troca_devolucao(id_compra):
+    if 'id_cliente' not in session:
+        return redirect(url_for('login'))
+    
+    # Busca a compra
+    compra = Compra.query.filter_by(id_compra=id_compra, id_cliente=session['id_cliente']).first_or_404()
+    
+    # Busca os itens - ADAPTE ESTA PARTE CONFORME SUA ESTRUTURA
+    # Esta é uma solução temporária usando o carrinho como exemplo
+    carrinho = Carrinho.query.filter_by(id_cliente=session['id_cliente']).first()
+    itens = []
+    if carrinho:
+        itens = Item_Carrinho.query.filter_by(id_carrinho=carrinho.id_carrinho).all()
+    
+    return render_template('solicitar_troca_devolucao.html', 
+                         compra=compra,
+                         itens=itens,
+                         IMAGENS_PRODUTOS=IMAGENS_PRODUTOS)
+
+
+
+@app.route('/api/solicitar_troca_devolucao', methods=['POST'])
+def solicitar_troca_devolucao():
+    if 'id_cliente' not in session:
+        return jsonify({'error': 'Não autorizado'}), 401
+        
+    dados = request.get_json()
+    
+    try:
+        # Verificar se a compra existe e pertence ao cliente
+        compra = Compra.query.filter_by(
+            id_compra=dados['id_compra'],
+            id_cliente=session['id_cliente']
+        ).first()
+        
+        if not compra:
+            return jsonify({'error': 'Compra não encontrada'}), 404
+        
+        # Criar a solicitação para a compra completa
+        nova_solicitacao = DevolucaoTroca(
+            tipo=dados['tipo'],
+            motivo=dados['motivo'],
+            id_cliente=session['id_cliente']
+        )
+        db.session.add(nova_solicitacao)
+        db.session.flush()  # Para obter o ID
+        
+        # Adicionar todos os produtos da compra
+        for id_produto, quantidade in dados['produtos'].items():
+            devolvido = DevolvidoTrocado(
+                id_troca=nova_solicitacao.id_troca,
+                id_produto=id_produto,
+                quantidade=quantidade
+            )
+            db.session.add(devolvido)
+        
+        # Criar relação com a compra
+        relacao = Solicita(
+            id_compra=compra.id_compra,
+            id_troca=nova_solicitacao.id_troca
+        )
+        db.session.add(relacao)
+        
+        db.session.commit()
+        return jsonify({'success': True, 'id_troca': nova_solicitacao.id_troca})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/api/produtos_compra/<int:id_compra>')
+def produtos_compra(id_compra):
+    if 'id_cliente' not in session:
+        return jsonify({'error': 'Não autorizado'}), 401
+    
+    compra = Compra.query.filter_by(
+        id_compra=id_compra,
+        id_cliente=session['id_cliente']
+    ).first_or_404()
+    
+    produtos = []
+    for item in compra.itens_compra:  # Você precisará criar esse relacionamento
+        produtos.append({
+            'id_produto': item.id_produto,
+            'nome': item.produto.nome,
+            'preco': item.produto.preco,
+            'quantidade': item.quantidade
+        })
+    
+    return jsonify(produtos)
 
 @app.route('/userlogin' , methods = ['GET' , 'POST'])
 def user_login():
