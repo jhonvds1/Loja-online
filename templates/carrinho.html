@@ -468,14 +468,43 @@
             });
 
             // Botão de finalizar compra
-            checkoutBtn.addEventListener('click', function() {
+            checkoutBtn.addEventListener('click', async function(e) {
+                e.preventDefault();
+                
                 if (cartItems.length === 0) {
                     showError('Seu carrinho está vazio');
                     return;
                 }
-                alert('Redirecionando para o checkout...');
-                // window.location.href = '/checkout';
+
+                try {
+                    checkoutBtn.disabled = true;
+                    checkoutBtn.textContent = 'Processando...';
+                    
+                    const response = await fetch('/finalizar_compra', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || 'Erro ao finalizar compra');
+                    }
+
+                    showSuccess(data.message);
+                    await renderCart();
+        
+                } catch (error) {
+                    console.error('Erro:', error);
+                    showError(error.message);
+                } finally {
+                    checkoutBtn.disabled = false;
+                    checkoutBtn.textContent = 'Finalizar Compra';
+                }
             });
+
 
             // Carregar carrinho inicialmente
             renderCart();

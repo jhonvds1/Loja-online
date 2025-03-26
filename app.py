@@ -10,6 +10,19 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
+class Compra(db.Model):
+    __tablename__ = 'compra'
+    id_compra = db.Column(db.Integer, primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default='pendente')
+    valor_total = db.Column(db.Float, nullable=False)
+    data_compra = db.Column(db.DateTime, nullable=False, server_default=db.func.now())
+    id_cliente = db.Column(db.Integer, db.ForeignKey('cliente.id_cliente'), nullable=False)
+    
+    cliente = db.relationship('Cliente', backref=db.backref('compras', lazy=True))
+
+    def __repr__(self):
+        return f'<Compra {self.id_compra} - {self.status}>'
+
 class Carrinho(db.Model):
     id_carrinho = db.Column(db.Integer , primary_key = True)
     id_cliente = db.Column(db.Integer , nullable = False)
@@ -49,6 +62,47 @@ class Cliente(db.Model):
     bairro = db.Column(db.String(100) , nullable = False)
     numero = db.Column(db.String(10) , nullable = False)
     rua = db.Column(db.String(255) , nullable = False)
+
+@app.route('/finalizar_compra', methods=['POST'])
+def finalizar_compra():
+    if 'id_cliente' not in session:
+        return jsonify({'error': 'Você precisa estar logado para finalizar a compra.'}), 401
+
+    cliente_id = session['id_cliente']
+    
+    # Obter o carrinho atual do cliente
+    carrinho = Carrinho.query.filter_by(id_cliente=cliente_id).first()
+    
+    if not carrinho or not carrinho.itens:
+        return jsonify({'error': 'Seu carrinho está vazio.'}), 400
+
+    # Calcular o valor total
+    valor_total = sum(item.produto.preco * item.quantidade for item in carrinho.itens)
+    
+    try:
+        # Criar a nova compra
+        nova_compra = Compra(
+            status='pendente',
+            valor_total=valor_total,
+            id_cliente=cliente_id
+        )
+        db.session.add(nova_compra)
+        
+        # Limpar o carrinho - remover todos os itens
+        Item_Carrinho.query.filter_by(id_carrinho=carrinho.id_carrinho).delete()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Compra finalizada com sucesso! Carrinho limpo.',
+            'compra_id': nova_compra.id_compra,
+            'valor_total': valor_total
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Erro ao finalizar compra: {str(e)}'}), 500
 
 @app.route('/add_usuario' , methods=['POST'])
 def add_usuario():
