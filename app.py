@@ -469,3 +469,5 @@ if __name__ == '__main__':
                 db.session.rollback()
     
     app.run(debug=True)
+
+#TODO: Criar gatilho para pedir mais produtos quando chegam no valor mínimo. criar Devolução/Troca
