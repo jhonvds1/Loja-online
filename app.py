@@ -1,5 +1,6 @@
 from flask import Flask, render_template, jsonify, request, redirect , url_for , flash , session
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 import os
 
 app = Flask(__name__)
@@ -30,7 +31,7 @@ class Item_Carrinho(db.Model):
 
 class Produto(db.Model):
     __tablename__ = 'produto'  
-    id_produto = db.Column(db.Integer, primary_key=True)
+    id_produto = db.Column(db.Integer, primary_key=True, autoincrement=True, default = 1)
     nome = db.Column(db.String(100), nullable=False)
     preco = db.Column(db.Float, nullable=False)
     categoria = db.Column(db.String(50))
@@ -271,4 +272,37 @@ def ver_carrinho():
     })
     
 if __name__ == '__main__':
+    with app.app_context():
+        # Cria as tabelas se não existirem
+        db.create_all()
+        
+        # Configura a sequência para começar em 1 (PostgreSQL)
+        if db.engine.name == 'postgresql':
+            try:
+                # Primeiro tenta atualizar a versão de collation
+                db.session.execute(text("ALTER DATABASE \"Trabalho_PBD\" REFRESH COLLATION VERSION"))
+                db.session.commit()
+                print("Versão de collation atualizada com sucesso.")
+            except Exception as collation_error:
+                print(f"Aviso: Não foi possível atualizar a versão de collation: {collation_error}")
+                db.session.rollback()
+            
+            try:
+                # Configura a sequência do ID do produto
+                db.session.execute(text("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'produto_id_produto_seq') THEN
+                            CREATE SEQUENCE produto_id_produto_seq START 1;
+                        ELSE
+                            ALTER SEQUENCE produto_id_produto_seq RESTART WITH 1;
+                        END IF;
+                    END $$;
+                """))
+                db.session.commit()
+                print("Sequência do produto configurada para começar em 1.")
+            except Exception as seq_error:
+                print(f"Erro ao configurar sequência: {seq_error}")
+                db.session.rollback()
+    
     app.run(debug=True)

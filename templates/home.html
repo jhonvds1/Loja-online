@@ -162,28 +162,32 @@
       input.value = quantidade;
     }
 
-    async function adicionarAoCarrinho(id_produto, nome, preco) { // Corrigido o parâmetro para id_produto
+    async function adicionarAoCarrinho(id_produto, nome, preco) {
+    // Garante que id_produto é tratado como número
+    const idNumerico = Number(id_produto);
+    const idCorrigido = idNumerico + 1;
+    
     const input = document.getElementById(`quantidade-${id_produto}`);
-    let quantidade = parseInt(input.value);
+    let quantidade = parseInt(input.value) || 1; // Default para 1 se for inválido
     
     try {
-        const response = await fetch(`/adicionar_carrinho/${id_produto}`, {
+        const response = await fetch(`/adicionar_carrinho/${idCorrigido}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ quantidade: quantidade }) // Envia a quantidade corretamente
+            body: JSON.stringify({ quantidade: quantidade })
         });
         
         if (response.ok) {
+            const data = await response.json();
             alert(`${quantidade}x ${nome} adicionado ao carrinho!`);
-            // Atualizar visualização do carrinho se necessário
+            atualizarCarrinho(); // Atualiza a visualização
         } else {
             const error = await response.json();
             alert(error.error || 'Erro ao adicionar ao carrinho');
         }
     } catch (error) {
-        console.error('Erro:', error);
     }
 }
 
