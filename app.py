@@ -27,6 +27,16 @@ class Carrinho(db.Model):
     id_carrinho = db.Column(db.Integer , primary_key = True)
     id_cliente = db.Column(db.Integer , nullable = False)
 
+class Estoque(db.Model):
+    __tablename__ = 'estoque'
+    id_estoque = db.Column(db.Integer, db.ForeignKey('produto.id_produto'), primary_key=True)
+    quantidade = db.Column(db.Integer, nullable=False, default=0)
+    
+    produto = db.relationship('Produto', backref=db.backref('estoque_info', uselist=False))
+
+    def __repr__(self):
+        return f'<Estoque Produto {self.id_estoque} - Qtd: {self.quantidade}>'
+
 class Item_Carrinho(db.Model):
     __tablename__ = 'item_carrinho'
     __table_args__ = (
@@ -69,33 +79,46 @@ def finalizar_compra():
         return jsonify({'error': 'Você precisa estar logado para finalizar a compra.'}), 401
 
     cliente_id = session['id_cliente']
-    
-    # Obter o carrinho atual do cliente
     carrinho = Carrinho.query.filter_by(id_cliente=cliente_id).first()
     
     if not carrinho or not carrinho.itens:
         return jsonify({'error': 'Seu carrinho está vazio.'}), 400
 
-    # Calcular o valor total
-    valor_total = sum(item.produto.preco * item.quantidade for item in carrinho.itens)
-    
     try:
-        # Criar a nova compra
+        # Verificar estoque antes de processar
+        for item in carrinho.itens:
+            estoque = Estoque.query.get(item.id_produto)
+            if not estoque or estoque.quantidade < item.quantidade:
+                produto = Produto.query.get(item.id_produto)
+                disponivel = estoque.quantidade if estoque else 0
+                return jsonify({
+                    'error': f'Estoque insuficiente para {produto.nome}. Disponível: {disponivel}'
+                }), 400
+
+        # Calcular valor total
+        valor_total = sum(item.produto.preco * item.quantidade for item in carrinho.itens)
+        
+        # Criar a compra
         nova_compra = Compra(
-            status='pendente',
+            status='concluída',
             valor_total=valor_total,
             id_cliente=cliente_id
         )
         db.session.add(nova_compra)
-        
-        # Limpar o carrinho - remover todos os itens
+
+        # Atualizar estoque e processar itens
+        for item in carrinho.itens:
+            estoque = Estoque.query.get(item.id_produto)
+            estoque.quantidade -= item.quantidade  # Reduz o estoque
+
+        # Limpar carrinho
         Item_Carrinho.query.filter_by(id_carrinho=carrinho.id_carrinho).delete()
         
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': 'Compra finalizada com sucesso! Carrinho limpo.',
+            'message': 'Compra finalizada com sucesso! Estoque atualizado.',
             'compra_id': nova_compra.id_compra,
             'valor_total': valor_total
         })
@@ -103,6 +126,7 @@ def finalizar_compra():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Erro ao finalizar compra: {str(e)}'}), 500
+
 
 @app.route('/add_usuario' , methods=['POST'])
 def add_usuario():
@@ -189,13 +213,17 @@ IMAGENS_PRODUTOS = {
 @app.route('/api/produtos')
 def api_produtos():
     produtos = Produto.query.all()
-    produtos_list = [{
-        'id_produto': produto.id_produto,
-        'nome': produto.nome,
-        'preco': produto.preco,
-        'categoria': produto.categoria,
-        'imagem': IMAGENS_PRODUTOS.get(produto.id_produto, "https://via.placeholder.com/150")  # Imagem padrão se não tiver mapeamento
-    } for produto in produtos]
+    produtos_list = []
+    for produto in produtos:
+        estoque = Estoque.query.get(produto.id_produto)
+        produtos_list.append({
+            'id_produto': produto.id_produto,
+            'nome': produto.nome,
+            'preco': produto.preco,
+            'estoque': estoque.quantidade if estoque else 0,
+            'categoria': produto.categoria,
+            'imagem': IMAGENS_PRODUTOS.get(produto.id_produto, "https://via.placeholder.com/150")
+        })
     return jsonify(produtos_list)
 
 def register_new_user():
