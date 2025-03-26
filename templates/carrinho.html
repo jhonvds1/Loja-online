@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrinho de Compras</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            padding: 20px;
+        }
+
+        .cart-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 25px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #5a1a2b;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .cart-items {
+            margin-bottom: 30px;
+        }
+
+        .cart-item {
+            display: flex;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #eee;
+            position: relative;
+        }
+
+        .product-img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 5px;
+            margin-right: 20px;
+        }
+
+        .item-details {
+            flex-grow: 1;
+        }
+
+        .product-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+
+        .product-price {
+            color: #5a1a2b;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .quantity-control {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+
+        .quantity-btn {
+            width: 30px;
+            height: 30px;
+            background: #f0f0f0;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .quantity-input {
+            width: 50px;
+            text-align: center;
+            margin: 0 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px;
+            -moz-appearance: textfield;
+        }
+
+        .quantity-input::-webkit-outer-spin-button,
+        .quantity-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .remove-btn {
+            background: none;
+            border: none;
+            color: #d9534f;
+            cursor: pointer;
+            position: absolute;
+            right: 0;
+            top: 15px;
+            font-size: 20px;
+        }
+
+        .cart-summary {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .total-price {
+            font-size: 20px;
+            font-weight: bold;
+            color: #5a1a2b;
+        }
+
+        .checkout-btn {
+            width: 100%;
+            padding: 12px;
+            background: #5a1a2b;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+
+        .checkout-btn:hover {
+            background: #3d0f1b;
+        }
+
+        .empty-cart {
+            text-align: center;
+            padding: 40px 0;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .error-message {
+            color: #d9534f;
+            text-align: center;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .updating {
+            position: relative;
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        
+        .updating::after {
+            content: "Atualizando...";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #5a1a2b;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="cart-container">
+        <h1>Seu Carrinho</h1>
+        
+        <div class="cart-items" id="cart-items">
+            <div class="loading">Carregando seu carrinho...</div>
+        </div>
+
+        <div class="cart-summary">
+            <div class="summary-row">
+                <span>Subtotal:</span>
+                <span id="subtotal">R$ 0,00</span>
+            </div>
+            <div class="summary-row">
+                <span>Frete:</span>
+                <span id="shipping">R$ 0,00</span>
+            </div>
+            <div class="summary-row total-price">
+                <span>Total:</span>
+                <span id="total">R$ 0,00</span>
+            </div>
+            <button class="checkout-btn" id="checkout-btn">Finalizar Compra</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const cartContainer = document.getElementById('cart-items');
+            const subtotalElement = document.getElementById('subtotal');
+            const totalElement = document.getElementById('total');
+            const checkoutBtn = document.getElementById('checkout-btn');
+            let cartItems = [];
+            let updateInProgress = false;
+
+            // Função para exibir mensagem de erro
+            function showError(message) {
+                cartContainer.innerHTML = `<div class="error-message">${message}</div>`;
+            }
+
+            // Função para carregar itens do carrinho
+            async function loadCartItems() {
+                try {
+                    const response = await fetch('/ver_carrinho');
+                    
+                    if (!response.ok) {
+                        if (response.status === 401) {
+                            showError('Faça login para acessar seu carrinho');
+                            return [];
+                        }
+                        throw new Error('Erro ao carregar carrinho');
+                    }
+                    
+                    const data = await response.json();
+                    return data.itens || [];
+                } catch (error) {
+                    console.error('Erro:', error);
+                    showError('Erro ao carregar carrinho. Tente novamente mais tarde.');
+                    return [];
+                }
+            }
+
+            // Função para renderizar os itens do carrinho
+            async function renderCart() {
+                cartItems = await loadCartItems();
+                cartContainer.innerHTML = '';
+
+                if (cartItems.length === 0) {
+                    cartContainer.innerHTML = '<div class="empty-cart">Seu carrinho está vazio</div>';
+                    updateTotals(0);
+                    return;
+                }
+
+                let subtotal = 0;
+
+                cartItems.forEach(item => {
+                    const itemTotal = item.preco * item.quantidade;
+                    subtotal += itemTotal;
+
+                    const itemElement = document.createElement('div');
+                    itemElement.className = 'cart-item';
+                    itemElement.innerHTML = `
+                        <img src="${item.imagem || 'https://via.placeholder.com/150'}?${Date.now()}" 
+                             alt="${item.nome}" 
+                             class="product-img"
+                             onerror="this.src='https://via.placeholder.com/150'">
+                        <div class="item-details">
+                            <div class="product-name">${item.nome}</div>
+                            <div class="product-price">R$ ${item.preco.toFixed(2)}</div>
+                            <div class="quantity-control">
+                                <button class="quantity-btn minus" data-id="${item.id_produto}">-</button>
+                                <input type="number" 
+                                       class="quantity-input" 
+                                       value="${item.quantidade}" 
+                                       min="1" 
+                                       data-id="${item.id_produto}"
+                                       readonly>
+                                <button class="quantity-btn plus" data-id="${item.id_produto}">+</button>
+                            </div>
+                        </div>
+                        <button class="remove-btn" data-id="${item.id_produto}">×</button>
+                    `;
+                    cartContainer.appendChild(itemElement);
+                });
+
+                updateTotals(subtotal);
+            }
+
+            // Função para atualizar totais
+            function updateTotals(subtotal) {
+                const shipping = subtotal > 200 ? 0 : 15.00;
+                const total = subtotal + shipping;
+
+                subtotalElement.textContent = `R$ ${subtotal.toFixed(2)}`;
+                document.getElementById('shipping').textContent = `R$ ${shipping.toFixed(2)}`;
+                totalElement.textContent = `R$ ${total.toFixed(2)}`;
+            }
+
+            // Função para atualizar quantidade
+            async function updateQuantity(itemId, newQuantity) {
+                if (updateInProgress) return;
+                updateInProgress = true;
+                
+                cartContainer.classList.add('updating');
+                
+                try {
+                    const response = await fetch(`/adicionar_carrinho/${itemId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ quantidade: newQuantity })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Erro ao atualizar quantidade');
+                    }
+
+                    await renderCart(); // Recarrega todo o carrinho
+                } catch (error) {
+                    console.error('Erro:', error);
+                    alert('Erro ao atualizar quantidade');
+                } finally {
+                    cartContainer.classList.remove('updating');
+                    updateInProgress = false;
+                }
+            }
+
+            // Função para remover item
+            async function removeItem(itemId) {
+                if (updateInProgress) return;
+                updateInProgress = true;
+                
+                cartContainer.classList.add('updating');
+                
+                try {
+                    const response = await fetch(`/remover_item/${itemId}`, {
+                        method: 'POST'
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Erro ao remover item');
+                    }
+
+                    await renderCart(); // Recarrega todo o carrinho
+                } catch (error) {
+                    console.error('Erro:', error);
+                    alert('Erro ao remover item');
+                } finally {
+                    cartContainer.classList.remove('updating');
+                    updateInProgress = false;
+                }
+            }
+
+            // Event listeners
+            cartContainer.addEventListener('click', function(e) {
+                if (e.target.classList.contains('remove-btn')) {
+                    const itemId = parseInt(e.target.getAttribute('data-id'));
+                    removeItem(itemId);
+                } 
+                else if (e.target.classList.contains('quantity-btn')) {
+                    const input = e.target.closest('.quantity-control').querySelector('.quantity-input');
+                    const itemId = parseInt(input.getAttribute('data-id'));
+                    let quantity = parseInt(input.value);
+                    
+                    if (e.target.classList.contains('plus')) {
+                        quantity++;
+                    } else {
+                        quantity = Math.max(1, quantity - 1);
+                    }
+                    
+                    updateQuantity(itemId, quantity);
+                }
+            });
+
+            // Input manual de quantidade (desativado para evitar problemas)
+            cartContainer.addEventListener('change', function(e) {
+                if (e.target.classList.contains('quantity-input')) {
+                    e.target.blur(); // Remove o foco para evitar edição manual
+                }
+            });
+
+            // Botão de finalizar compra
+            checkoutBtn.addEventListener('click', function() {
+                if (cartItems.length === 0) {
+                    alert('Seu carrinho está vazio');
+                    return;
+                }
+                alert('Redirecionando para o checkout...');
+                // window.location.href = '/checkout';
+            });
+
+            // Carregar carrinho inicialmente
+            renderCart();
+        });
+    </script>
+</body>
+</html>
