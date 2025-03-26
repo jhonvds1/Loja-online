@@ -27,7 +27,20 @@ class Carrinho(db.Model):
     id_carrinho = db.Column(db.Integer , primary_key = True)
     id_cliente = db.Column(db.Integer , nullable = False)
 
+class Avaliacao(db.Model):
+    __tablename__ = 'avaliacao'
+    id_avaliacao = db.Column(db.Integer, primary_key=True)
+    id_cliente = db.Column(db.Integer, db.ForeignKey('cliente.id_cliente'), nullable=False)
+    nota = db.Column(db.Integer, nullable=False)
+    comentario = db.Column(db.String(500))
+    
+    cliente = db.relationship('Cliente', backref=db.backref('avaliacoes', lazy=True))
+    produtos = db.relationship('Produto', secondary='recebe', backref=db.backref('avaliacoes', lazy=True))
 
+class Recebe(db.Model):
+    __tablename__ = 'recebe'
+    avaliacaoid = db.Column(db.Integer, db.ForeignKey('avaliacao.id_avaliacao'), primary_key=True)
+    id_produto = db.Column(db.Integer, db.ForeignKey('produto.id_produto'), primary_key=True)
 
 class Estoque(db.Model):
     __tablename__ = 'estoque'
@@ -128,6 +141,63 @@ def finalizar_compra():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Erro ao finalizar compra: {str(e)}'}), 500
+
+@app.route('/api/avaliacoes/<int:produto_id>')  # Alterado para produto_id para consistência
+def get_avaliacoes(produto_id):  # Mantido como produto_id
+    avaliacoes = db.session.query(Avaliacao)\
+                  .join(Recebe, Recebe.avaliacaoid == Avaliacao.id_avaliacao)\
+                  .join(Cliente)\
+                  .filter(Recebe.id_produto == produto_id)\
+                  .all()
+    
+    return jsonify([{
+        'id_avaliacao': av.id_avaliacao,
+        'nome_cliente': av.cliente.nome,
+        'nota': av.nota,
+        'comentario': av.comentario
+    } for av in avaliacoes])
+
+@app.route('/api/avaliar', methods=['POST'])
+def avaliar_produto():
+    if 'id_cliente' not in session:
+        return jsonify({'error': 'Faça login para avaliar produtos'}), 401
+        
+    try:
+        dados = request.get_json()
+        if not dados or 'id_produto' not in dados:
+            return jsonify({'error': 'Dados incompletos. ID do produto é obrigatório.'}), 400
+
+        # Verifica se o produto existe
+        produto = Produto.query.get(dados['id_produto'])
+        if not produto:
+            return jsonify({'error': 'Produto não encontrado'}), 404
+
+        # Cria a avaliação
+        nova_avaliacao = Avaliacao(
+            id_cliente=session['id_cliente'],
+            nota=dados['nota'],
+            comentario=dados.get('comentario', '')
+        )
+        db.session.add(nova_avaliacao)
+        db.session.flush()  # Para obter o ID da nova avaliação
+        
+        # Cria o relacionamento na tabela Recebe
+        relacao = Recebe(
+            avaliacaoid=nova_avaliacao.id_avaliacao,
+            id_produto=dados['id_produto']
+        )
+        db.session.add(relacao)
+        
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Avaliação registrada com sucesso!',
+            'id_avaliacao': nova_avaliacao.id_avaliacao
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Erro ao processar avaliação: {str(e)}'}), 500
 
 
 @app.route('/add_usuario' , methods=['POST'])
